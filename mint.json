@@ -1,0 +1,14 @@
+{
+  "name": "Mint",
+  "species": "Indian Ringneck Parrot",
+  "age_months": 6,
+  "favourite_foods": [
+    "seeds",
+    "fruit",
+    "veggies"
+  ],
+  "tricks_known": [
+    "step up",
+    "wave"
+  ]
+}
