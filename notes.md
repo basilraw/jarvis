@@ -49,3 +49,7 @@ Week 3 = Claude API. weather.py becomes the template for Jarvis's `get_weather` 
 Week 7 = same code, but running on a Raspberry Pi.
 ## Git status
 - Project is now version-controlled with git
+## Git workflow learned
+- git init / add / commit / log
+- Branches for risky changes
+- Merging back into main
