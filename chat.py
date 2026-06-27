@@ -55,15 +55,25 @@ while True:
 
     conversation.append({"role": "user", "content": user_input})
 
-    message = client.messages.create(
+    # Print the label first, no newline, flush so it appears immediately
+    print("\nJarvis: ", end="", flush=True)
+
+    # Stream the response — text appears as Claude generates it
+    full_reply = ""
+    with client.messages.stream(
         model="claude-haiku-4-5",
         max_tokens=500,
         system=SYSTEM_PROMPT,
         messages=conversation
-    )
+    ) as stream:
+        for text in stream.text_stream:
+            print(text, end="", flush=True)
+            full_reply += text
 
-    reply = message.content[0].text
-    conversation.append({"role": "assistant", "content": reply})
+        # Once the stream finishes, get the full message for usage stats
+        final = stream.get_final_message()
 
-    print(f"\nJarvis: {reply}\n")
-    print(f"  [tokens: {message.usage.input_tokens} in / {message.usage.output_tokens} out · history: {len(conversation)} messages]\n")
+    # Save the full reply to history (same as before)
+    conversation.append({"role": "assistant", "content": full_reply})
+
+    print(f"\n\n  [tokens: {final.usage.input_tokens} in / {final.usage.output_tokens} out · history: {len(conversation)} messages]\n")
