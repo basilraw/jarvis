@@ -4,6 +4,7 @@ import json
 import datetime
 import anthropic
 from dotenv import load_dotenv
+from tools import TOOL_DEFINITIONS, TOOL_FUNCTIONS
 
 load_dotenv()
 client = anthropic.Anthropic()
@@ -48,6 +49,21 @@ He's on a 12-week plan. Done: Python foundations (Week 1), Linux/Git (Week 2). C
 CHATS_DIR = "chats"
 
 
+def _serialize_content(content):
+    """Convert content into JSON-safe form. Could be a string or a list of blocks."""
+    if isinstance(content, str):
+        return content
+    safe = []
+    for block in content:
+        # Anthropic SDK objects have a .model_dump() method
+        if hasattr(block, "model_dump"):
+            safe.append(block.model_dump())
+        else:
+            # Already a plain dict (our tool_result messages)
+            safe.append(block)
+    return safe
+
+
 def save_chat(conversation):
     """Save the current conversation to chats/<timestamp>.json."""
     if not conversation:
@@ -56,8 +72,12 @@ def save_chat(conversation):
     os.makedirs(CHATS_DIR, exist_ok=True)
     filename = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ".json"
     path = os.path.join(CHATS_DIR, filename)
+    serializable = [
+        {"role": m["role"], "content": _serialize_content(m["content"])}
+        for m in conversation
+    ]
     with open(path, "w", encoding="utf-8") as f:
-        json.dump(conversation, f, indent=2, ensure_ascii=False)
+        json.dump(serializable, f, indent=2, ensure_ascii=False)
     return path
 
 
@@ -114,20 +134,53 @@ while True:
     # Otherwise: send to Claude
     conversation.append({"role": "user", "content": user_input})
 
-    print("\nJarvis: ", end="", flush=True)
+    # Inner loop — handles Claude possibly asking to call tools repeatedly
+    # before producing his final reply.
+    while True:
+        print("\nJarvis: ", end="", flush=True)
 
-    full_reply = ""
-    with client.messages.stream(
-        model="claude-haiku-4-5",
-        max_tokens=500,
-        system=SYSTEM_PROMPT,
-        messages=conversation
-    ) as stream:
-        for text in stream.text_stream:
-            print(text, end="", flush=True)
-            full_reply += text
-        final = stream.get_final_message()
+        full_text = ""
+        with client.messages.stream(
+            model="claude-haiku-4-5",
+            max_tokens=500,
+            system=SYSTEM_PROMPT,
+            tools=TOOL_DEFINITIONS,
+            messages=conversation,
+        ) as stream:
+            for text in stream.text_stream:
+                print(text, end="", flush=True)
+                full_text += text
+            final = stream.get_final_message()
 
-    conversation.append({"role": "assistant", "content": full_reply})
+        # Always save Claude's full structured response (text + any tool requests)
+        conversation.append({"role": "assistant", "content": final.content})
 
-    print(f"\n\n  [tokens: {final.usage.input_tokens} in / {final.usage.output_tokens} out · history: {len(conversation)} messages]\n")
+        # If Claude asked for a tool, run it and loop back so he can use the result.
+        if final.stop_reason == "tool_use":
+            tool_results = []
+            for block in final.content:
+                if block.type == "tool_use":
+                    tool_name = block.name
+                    tool_input = block.input
+                    print(f"\n  >> [running {tool_name}({tool_input})]")
+                    func = TOOL_FUNCTIONS.get(tool_name)
+                    if func is None:
+                        result = f"Error: tool '{tool_name}' not implemented."
+                    else:
+                        try:
+                            result = func(**tool_input)
+                        except Exception as e:
+                            result = f"Error running {tool_name}: {e}"
+                    print(f"  >> [result: {result}]\n")
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": result,
+                    })
+            conversation.append({"role": "user", "content": tool_results})
+            # Loop back — Claude needs another turn to use these results.
+            continue
+
+        # No tool requested — this was the final reply, exit inner loop.
+        print(f"\n\n  [tokens: {final.usage.input_tokens} in / {final.usage.output_tokens} out · history: {len(conversation)} messages]\n")
+        break
