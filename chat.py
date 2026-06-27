@@ -1,4 +1,7 @@
 """Chat with Jarvis — Basil's personal assistant."""
+import os
+import json
+import datetime
 import anthropic
 from dotenv import load_dotenv
 
@@ -42,23 +45,77 @@ Things you know about his project:
 He's on a 12-week plan. Done: Python foundations (Week 1), Linux/Git (Week 2). Currently mid-Week 3 on the Anthropic API — that's literally how you exist. Don't pretend not to know him.
 """
 
+CHATS_DIR = "chats"
+
+
+def save_chat(conversation):
+    """Save the current conversation to chats/<timestamp>.json."""
+    if not conversation:
+        print("  (nothing to save — conversation is empty)")
+        return None
+    os.makedirs(CHATS_DIR, exist_ok=True)
+    filename = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ".json"
+    path = os.path.join(CHATS_DIR, filename)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(conversation, f, indent=2, ensure_ascii=False)
+    return path
+
+
+def show_help():
+    print("""
+Commands:
+  /help     show this message
+  /clear    wipe conversation memory (start fresh)
+  /save     save the current chat to chats/<timestamp>.json
+  /quit     save and exit
+""")
+
+
 conversation = []
 
-print("Chat with Jarvis. Type 'quit' to exit.\n")
+print("Chat with Jarvis. Type /help for commands.\n")
 
 while True:
-    user_input = input("Basil: ")
+    user_input = input("Basil: ").strip()
 
-    if user_input.lower() == "quit":
-        print("Goodbye!")
-        break
+    # Empty input — just re-prompt
+    if not user_input:
+        continue
 
+    # Slash commands are handled locally
+    if user_input.startswith("/"):
+        cmd = user_input.lower()
+
+        if cmd == "/help":
+            show_help()
+            continue
+
+        if cmd == "/clear":
+            conversation = []
+            print("  (memory wiped — Jarvis won't remember anything from before this)\n")
+            continue
+
+        if cmd == "/save":
+            path = save_chat(conversation)
+            if path:
+                print(f"  (saved to {path})\n")
+            continue
+
+        if cmd == "/quit":
+            path = save_chat(conversation)
+            if path:
+                print(f"  (saved to {path})")
+            print("Goodbye!")
+            break
+
+        print(f"  (unknown command: {user_input} — try /help)\n")
+        continue
+
+    # Otherwise: send to Claude
     conversation.append({"role": "user", "content": user_input})
 
-    # Print the label first, no newline, flush so it appears immediately
     print("\nJarvis: ", end="", flush=True)
 
-    # Stream the response — text appears as Claude generates it
     full_reply = ""
     with client.messages.stream(
         model="claude-haiku-4-5",
@@ -69,11 +126,8 @@ while True:
         for text in stream.text_stream:
             print(text, end="", flush=True)
             full_reply += text
-
-        # Once the stream finishes, get the full message for usage stats
         final = stream.get_final_message()
 
-    # Save the full reply to history (same as before)
     conversation.append({"role": "assistant", "content": full_reply})
 
     print(f"\n\n  [tokens: {final.usage.input_tokens} in / {final.usage.output_tokens} out · history: {len(conversation)} messages]\n")
