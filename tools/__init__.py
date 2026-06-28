@@ -9,6 +9,12 @@ from .filesystem import FS_DEFS, FS_FUNCS
 from .timemath import TIMEMATH_DEFS, TIMEMATH_FUNCS
 from .notes import NOTES_DEFS, NOTES_FUNCS
 from .council import COUNCIL_DEFS, COUNCIL_FUNCS
+# Trading tools are private — file is gitignored, only loaded if present
+try:
+    from .trading import TRADING_DEFS, TRADING_FUNCS
+except ImportError:
+    TRADING_DEFS = []
+    TRADING_FUNCS = {}
 
 # Anthropic's built-in web search — Claude runs the search on their end.
 # Just include this in the tools list and it works. No Python function needed.
@@ -24,6 +30,7 @@ TOOL_DEFINITIONS = (
     + TIMEMATH_DEFS
     + NOTES_DEFS
     + COUNCIL_DEFS
+    + TRADING_DEFS
     + [WEB_SEARCH_DEF]
 )
 
@@ -33,6 +40,7 @@ TOOL_FUNCTIONS = {
     **TIMEMATH_FUNCS,
     **NOTES_FUNCS,
     **COUNCIL_FUNCS,
+    **TRADING_FUNCS,
 }
 
 

@@ -6,3 +6,5 @@ history.json
 .env
 chats/
 notes.json
+trades.json
+tools/trading.py
