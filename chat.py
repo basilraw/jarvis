@@ -6,6 +6,7 @@ import anthropic
 from dotenv import load_dotenv
 from tools import TOOL_DEFINITIONS, TOOL_FUNCTIONS, list_all_tools
 from voice import listen
+from tts import speak
 
 load_dotenv()
 client = anthropic.Anthropic()
@@ -245,7 +246,8 @@ while True:
             conversation.append({"role": "user", "content": tool_results})
             # Loop back — Claude needs another turn to use these results.
             continue
-
+        
         # No tool requested — this was the final reply, exit inner loop.
+        speak(full_text)
         print(f"\n\n  [tokens: {final.usage.input_tokens} in / {final.usage.output_tokens} out · history: {len(conversation)} messages]\n")
         break
