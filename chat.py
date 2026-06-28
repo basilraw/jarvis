@@ -4,7 +4,7 @@ import json
 import datetime
 import anthropic
 from dotenv import load_dotenv
-from tools import TOOL_DEFINITIONS, TOOL_FUNCTIONS
+from tools import TOOL_DEFINITIONS, TOOL_FUNCTIONS, list_all_tools
 
 load_dotenv()
 client = anthropic.Anthropic()
@@ -61,6 +61,9 @@ You have a notes tool that PERSISTS across sessions. Use it actively:
 - When he asks about something he might have told you before, call search_notes FIRST. Don't say "I don't know" without searching.
 - Use sensible tags so notes are findable later. Examples: 'trade', 'mint', 'reminder', 'project', 'family'.
 - If he asks "what do you know about X" — search_notes(X), then answer based on what you find plus the current chat.
+
+Web search:
+You have a web_search tool. Use it whenever Basil asks about something current, factual, recent, or that you might not know reliably from training. Examples: news, sports scores, prices, current events, "what's the latest with X", any specific factual claim you're not certain about. Don't say "I don't have access to current info" — search instead. After searching, cite the source briefly in your answer when relevant.
 """
 
 CHATS_DIR = "chats"
@@ -102,6 +105,7 @@ def show_help():
     print("""
 Commands:
   /help     show this message
+  /tools    list all tools Jarvis has access to
   /clear    wipe conversation memory (start fresh)
   /save     save the current chat to chats/<timestamp>.json
   /quit     save and exit
@@ -138,6 +142,11 @@ while True:
                 print(f"  (saved to {path})\n")
             continue
 
+        if cmd == "/tools":
+            print(list_all_tools())
+            print()
+            continue
+        
         if cmd == "/quit":
             path = save_chat(conversation)
             if path:
