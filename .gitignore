@@ -8,3 +8,5 @@ chats/
 notes.json
 trades.json
 tools/trading.py
+test_recording.wav
+*.wav
