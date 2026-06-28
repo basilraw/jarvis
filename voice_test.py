@@ -8,7 +8,7 @@ import whisper
 SAMPLE_RATE = 16000      # Whisper's preferred sample rate
 DURATION = 5             # Seconds to record
 OUTPUT_FILE = "test_recording.wav"
-MODEL_NAME = "small.en"  # English-only Whisper model — fast and accurate enough
+MODEL_NAME = "small.en"  # Best fit for 1050 Ti — fast on GPU, fits in VRAM
 
 
 def record_audio(duration: int, sample_rate: int, output_file: str) -> None:
@@ -29,14 +29,16 @@ def record_audio(duration: int, sample_rate: int, output_file: str) -> None:
 
 def transcribe(audio_path: str, model_name: str) -> str:
     """Load the Whisper model and transcribe the file."""
-    print(f"\nLoading Whisper model '{model_name}' (first time downloads ~500MB)...")
+    import torch
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"\nLoading Whisper model '{model_name}' on {device.upper()}...")
     t0 = time.time()
-    model = whisper.load_model(model_name)
+    model = whisper.load_model(model_name, device=device)
     print(f"Model loaded in {time.time() - t0:.1f}s.")
 
     print("Transcribing...")
     t1 = time.time()
-    result = model.transcribe(audio_path, fp16=False)
+    result = model.transcribe(audio_path, fp16=True)  # small.en handles fp16 fine
     print(f"Transcription done in {time.time() - t1:.1f}s.")
     return result["text"].strip()
 
