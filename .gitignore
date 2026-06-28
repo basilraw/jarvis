@@ -10,3 +10,4 @@ trades.json
 tools/trading.py
 test_recording.wav
 *.wav
+voice_input.wav

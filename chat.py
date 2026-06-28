@@ -5,6 +5,7 @@ import datetime
 import anthropic
 from dotenv import load_dotenv
 from tools import TOOL_DEFINITIONS, TOOL_FUNCTIONS, list_all_tools
+from voice import listen
 
 load_dotenv()
 client = anthropic.Anthropic()
@@ -63,7 +64,24 @@ You have a notes tool that PERSISTS across sessions. Use it actively:
 - If he asks "what do you know about X" — search_notes(X), then answer based on what you find plus the current chat.
 
 Web search:
-You have a web_search tool. Use it whenever Basil asks about something current, factual, recent, or that you might not know reliably from training. Examples: news, sports scores, prices, current events, "what's the latest with X", any specific factual claim you're not certain about. Don't say "I don't have access to current info" — search instead. After searching, cite the source briefly in your answer when relevant.
+You have a web_search tool. Use it aggressively whenever a question involves specific factual claims you might not know reliably. Don't trust your own training data for:
+- Specific numbers (distances, populations, prices, dates, statistics, measurements)
+- Geographic facts about places outside major Western cities (especially Middle East, Africa, Asia)
+- Current events, sports scores, news, weather elsewhere
+- Anything where being off by 30% would mislead Basil
+
+Rule of thumb: if the answer is a specific number or fact, search first. If it's general knowledge or opinion, answer from training. When in doubt, search — Basil would rather wait 2 seconds for an accurate answer than get a confidently wrong one. After searching, briefly cite the source.
+
+Examples of when to search even if you "think" you know:
+- "How far is X from Y?" → search, distances are easy to misremember
+- "What's the population of X?" → search
+- "What time is the match?" → search
+- "What's the current price of X?" → search
+
+Examples of when NOT to search:
+- "What's 2+2?" → use calculate tool
+- "Tell me a fact about Indian Ringnecks" → general bio knowledge is fine from training
+- "Should I do X?" → that's opinion, no search needed
 
 The Council:
 You have a tool called summon_council. NEVER call it unless Basil explicitly mentions "the council" in his message. Trigger phrases: "ask the council", "run it by the council", "council it", "what does the council think", "bring this to the council", "summon the council". If he just asks for advice without saying "council", answer normally as Jarvis — do not summon. After the Council returns its verdict, you can add a one-line Jarvis comment if you want, but don't restate the whole thing.
@@ -115,6 +133,7 @@ def save_chat(conversation):
 def show_help():
     print("""
 Commands:
+  v         talk to Jarvis with your voice
   /help     show this message
   /tools    list all tools Jarvis has access to
   /clear    wipe conversation memory (start fresh)
@@ -133,6 +152,15 @@ while True:
     # Empty input — just re-prompt
     if not user_input:
         continue
+
+    # Voice input: type 'v' to talk instead of typing
+    if user_input.lower() == "v":
+        voice_text = listen()
+        if not voice_text:
+            print("  (didn't catch that — try again)\n")
+            continue
+        print(f"  [you said] {voice_text}\n")
+        user_input = voice_text
 
     # Slash commands are handled locally
     if user_input.startswith("/"):
