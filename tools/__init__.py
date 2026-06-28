@@ -8,6 +8,7 @@ from .weather import WEATHER_DEFS, WEATHER_FUNCS
 from .filesystem import FS_DEFS, FS_FUNCS
 from .timemath import TIMEMATH_DEFS, TIMEMATH_FUNCS
 from .notes import NOTES_DEFS, NOTES_FUNCS
+from .council import COUNCIL_DEFS, COUNCIL_FUNCS
 
 # Anthropic's built-in web search — Claude runs the search on their end.
 # Just include this in the tools list and it works. No Python function needed.
@@ -22,6 +23,7 @@ TOOL_DEFINITIONS = (
     + FS_DEFS
     + TIMEMATH_DEFS
     + NOTES_DEFS
+    + COUNCIL_DEFS
     + [WEB_SEARCH_DEF]
 )
 
@@ -30,6 +32,7 @@ TOOL_FUNCTIONS = {
     **FS_FUNCS,
     **TIMEMATH_FUNCS,
     **NOTES_FUNCS,
+    **COUNCIL_FUNCS,
 }
 
 
