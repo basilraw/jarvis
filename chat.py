@@ -94,9 +94,58 @@ You have trade-logging tools. Use them actively:
 - For "show me my trades" / "how am I doing" — list_trades or review_recent.
 - When he loses a trade or asks for honest review, call score_trade against the Hybrid Model rules: HTF alignment, liquidity sweep, BOS+FVG, 71% Fib (67% day), 1% risk max, 2.45R minimum.
 - Score brutally honest. If he broke the rules, say so. The whole point is improving — not validation.
-"""
+
+Output modes (CRITICAL — voice UX):
+Every reply must use ONE of these four modes. Use a `[MODE: name]` tag on line 1, then the content.
+
+1. [MODE: normal] — default for any normal question
+   Format:
+     [MODE: normal]
+     [SPOKEN]
+     1-2 sentence headline. This is read aloud.
+     [DETAILS]
+     The full answer in prose. This prints on screen but is NOT spoken.
+
+2. [MODE: summarise] — Basil said "summarise", "summarize", "summary", "key points", "bullet points", "list the main things"
+   Format:
+     [MODE: summarise]
+     - point 1 (5-8 WORDS MAX, no full sentence)
+     - point 2 (5-8 WORDS MAX)
+     - point 3 (5-8 WORDS MAX)
+     - (3 to 5 bullets — ruthlessly short)
+   NOTE: NO [SPOKEN]/[DETAILS] tags here. The bullets get both printed AND spoken.
+
+   Example for "summarise Indian Ringnecks":
+     [MODE: summarise]
+     - Medium green parrots from India
+     - Highly intelligent, learn to mimic
+     - Live 30 to 50 years
+     - Loud, social, demand attention
+     - Destructive if bored
+
+3. [MODE: summarise_details] — Basil said "summarise with details", "list and explain", "bullet points with details"
+   Format:
+     [MODE: summarise_details]
+     - Short headline — one short sentence, max 15 words.
+     - Short headline — one short sentence, max 15 words.
+     - (3 to 5 bullets)
+   NOTE: NO [SPOKEN]/[DETAILS] tags. Bullets are both printed AND spoken.
+
+4. [MODE: full] — Basil said "read it all", "read it out loud", "read the rest", "read everything", "say it all"
+   Format:
+     [MODE: full]
+     The full answer in prose. Write naturally for speaking — no markdown, no bullets, no headers, just continuous sentences.
+   NOTE: NO [SPOKEN]/[DETAILS] tags. Everything after [MODE: full] is both printed AND spoken.
+
+Rules:
+- ALWAYS pick a mode and ALWAYS use the [MODE: x] tag on line 1.
+- Default to [MODE: normal] unless he explicitly triggers one of the others.
+- ONLY [MODE: normal] uses the [SPOKEN] and [DETAILS] tags. The other three modes do NOT — they have just the content.
+- Tool outputs (Council, weather): use [MODE: normal] so the verdict speaks short and the tool result prints on screen.
+- If unsure which mode he asked for, default to [MODE: normal].
 
 CHATS_DIR = "chats"
+"""
 
 
 def _serialize_content(content):
@@ -113,6 +162,70 @@ def _serialize_content(content):
             safe.append(block)
     return safe
 
+def _parse_mode(text: str) -> str:
+    """Extract the [MODE: x] tag from line 1. Defaults to 'normal'."""
+    first_line = text.lstrip().split("\n", 1)[0]
+    if first_line.startswith("[MODE:"):
+        mode = first_line.replace("[MODE:", "").replace("]", "").strip()
+        return mode.lower()
+    return "normal"
+
+
+def _body_after_mode(text: str) -> str:
+    """Return Claude's reply with the [MODE: x] line stripped off."""
+    stripped = text.lstrip()
+    if stripped.startswith("[MODE:") and "\n" in stripped:
+        return stripped.split("\n", 1)[1].lstrip()
+    return text
+
+
+def _extract_printed(text: str) -> str:
+    """What gets printed to the user's screen based on the mode."""
+    mode = _parse_mode(text)
+    body = _body_after_mode(text)
+    if mode == "normal":
+        # Print only the DETAILS section
+        if "[DETAILS]" in body:
+            return body.split("[DETAILS]", 1)[1].strip()
+        return body  # fallback if format is broken
+    # All other modes print everything after [MODE: x]
+    return body
+
+
+def _extract_spoken(text: str) -> str:
+    """What gets read aloud by TTS based on the mode."""
+    mode = _parse_mode(text)
+    body = _body_after_mode(text)
+    if mode == "normal":
+        # Speak only the SPOKEN section
+        if "[SPOKEN]" in body and "[DETAILS]" in body:
+            start = body.index("[SPOKEN]") + len("[SPOKEN]")
+            end = body.index("[DETAILS]")
+            spoken = body[start:end].strip()
+            return _flatten_bullets(spoken)
+        return _first_two_sentences(body)
+    # Other modes: speak the same body that's printed
+    return _flatten_bullets(body)
+
+
+def _flatten_bullets(text: str) -> str:
+    """Convert markdown bullets to natural speech."""
+    lines = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if line.startswith("- "):
+            lines.append(line[2:].rstrip(".") + ".")
+        else:
+            lines.append(line)
+    return " ".join(lines)
+
+
+def _first_two_sentences(text: str) -> str:
+    """Fallback for malformed replies."""
+    sentences = text.split(".")
+    return ". ".join(sentences[:2]).strip() + "."
 
 def save_chat(conversation):
     """Save the current conversation to chats/<timestamp>.json."""
@@ -206,17 +319,23 @@ while True:
         print("\nJarvis: ", end="", flush=True)
 
         full_text = ""
+        # Stream silently. We decide what to print and what to speak after it finishes,
+        # based on the [MODE: ...] tag on line 1.
         with client.messages.stream(
             model="claude-haiku-4-5",
-            max_tokens=500,
+            max_tokens=2000,
             system=SYSTEM_PROMPT,
             tools=TOOL_DEFINITIONS,
             messages=conversation,
         ) as stream:
             for text in stream.text_stream:
-                print(text, end="", flush=True)
                 full_text += text
             final = stream.get_final_message()
+
+        # Print only the user-facing portion based on mode
+        printed_text = _extract_printed(full_text)
+        if printed_text:
+            print(printed_text, end="", flush=True)
 
         # Always save Claude's full structured response (text + any tool requests)
         conversation.append({"role": "assistant", "content": final.content})
@@ -248,6 +367,6 @@ while True:
             continue
         
         # No tool requested — this was the final reply, exit inner loop.
-        speak(full_text)
+        speak(_extract_spoken(full_text))
         print(f"\n\n  [tokens: {final.usage.input_tokens} in / {final.usage.output_tokens} out · history: {len(conversation)} messages]\n")
         break
